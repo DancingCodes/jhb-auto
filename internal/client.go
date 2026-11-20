@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -53,7 +52,6 @@ func (c *Client) request(ctx context.Context, endpoint, method string, body io.R
 		if resp.StatusCode == http.StatusTooManyRequests && method == http.MethodGet && attempt < maxRateLimitRetries {
 			delay := rateLimitDelay(resp.Header.Get("Retry-After"), attempt)
 			_ = resp.Body.Close()
-			log.Printf("上游限流: %s，%s 后重试 (%d/%d)", req.URL.Path, delay, attempt+1, maxRateLimitRetries)
 			timer := time.NewTimer(delay)
 			select {
 			case <-ctx.Done():
