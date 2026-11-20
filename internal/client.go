@@ -211,11 +211,12 @@ func (c *Client) MerchantDetail(ctx context.Context, token, merchantID string) (
 	return c.request(ctx, endpoint, http.MethodGet, nil, token)
 }
 
-func (c *Client) TerminalList(ctx context.Context, token, sn string, pageNum int) (json.RawMessage, error) {
+func (c *Client) TerminalList(ctx context.Context, token, recommendCode, sn string, pageNum int) (json.RawMessage, error) {
 	query := url.Values{
-		"sn":       {sn},
-		"pageNum":  {strconv.Itoa(pageNum)},
-		"pageSize": {"100"},
+		"recommendCode": {recommendCode},
+		"sn":            {sn},
+		"pageNum":       {strconv.Itoa(pageNum)},
+		"pageSize":      {"100"},
 	}
 	endpoint := gatewayAPI + "/pagent/agent-portal/query/terminal?" + query.Encode()
 	return c.request(ctx, endpoint, http.MethodGet, nil, token)

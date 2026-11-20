@@ -306,7 +306,7 @@ func queryMerchants(ctx context.Context, client *Client, token, recommendCode, d
 				if err := json.Unmarshal(terminal["sn"], &sn); err != nil || sn == "" {
 					return nil, errors.New("终端 SN 数据格式错误")
 				}
-				terminalList, err := queryTerminals(ctx, client, token, sn)
+				terminalList, err := queryTerminals(ctx, client, token, recommendCode, sn)
 				if err != nil {
 					return nil, err
 				}
@@ -332,10 +332,10 @@ func queryMerchants(ctx context.Context, client *Client, token, recommendCode, d
 	return merchants, nil
 }
 
-func queryTerminals(ctx context.Context, client *Client, token, sn string) ([]json.RawMessage, error) {
+func queryTerminals(ctx context.Context, client *Client, token, recommendCode, sn string) ([]json.RawMessage, error) {
 	terminals := []json.RawMessage{}
 	for pageNum := 1; ; pageNum++ {
-		result, err := client.TerminalList(ctx, token, sn, pageNum)
+		result, err := client.TerminalList(ctx, token, recommendCode, sn, pageNum)
 		if err != nil {
 			return nil, fmt.Errorf("终端 %s 查询失败: %w", sn, err)
 		}

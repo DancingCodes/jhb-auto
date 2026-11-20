@@ -25,7 +25,7 @@ config/accounts/*.json        各客户账号配置（真实账号不提交）
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/agent/{id}/descendants`
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/merchant`
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/merchant/{id}/detail`
-- `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/terminal`
+- `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/terminal`（按终端 SN 和所属代理的 `recommendCode` 查询）
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/trade`
 
 上游接口只由内部客户端调用，不单独暴露为本项目的 HTTP 路由。
