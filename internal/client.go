@@ -205,11 +205,6 @@ func (c *Client) MerchantListBySN(ctx context.Context, token, sn string, pageNum
 	return c.request(ctx, endpoint, http.MethodGet, nil, token)
 }
 
-func (c *Client) MerchantDetail(ctx context.Context, token, merchantID string) (json.RawMessage, error) {
-	endpoint := gatewayAPI + "/pagent/agent-portal/query/merchant/" + url.PathEscape(merchantID) + "/detail"
-	return c.request(ctx, endpoint, http.MethodGet, nil, token)
-}
-
 func (c *Client) TerminalList(ctx context.Context, token, recommendCode, startTime, endTime string, pageNum int) (json.RawMessage, error) {
 	query := url.Values{
 		"recommendCode": {recommendCode},

@@ -236,7 +236,6 @@ func populateTerminalMerchants(ctx context.Context, client *Client, token string
 
 func queryMerchantsBySN(ctx context.Context, client *Client, token, sn string) ([]Merchant, error) {
 	merchants := []Merchant{}
-	seenMerchants := make(map[string]bool)
 	for pageNum := 1; ; pageNum++ {
 		result, err := client.MerchantListBySN(ctx, token, sn, pageNum)
 		if err != nil {
@@ -248,28 +247,7 @@ func queryMerchantsBySN(ctx context.Context, client *Client, token, sn string) (
 		if err := json.Unmarshal(result, &response); err != nil || response.Data == nil {
 			return nil, fmt.Errorf("终端 %s 商户列表数据格式错误", sn)
 		}
-		for _, merchant := range response.Data.List {
-			var merchantID string
-			if err := json.Unmarshal(merchant["id"], &merchantID); err != nil || merchantID == "" {
-				return nil, errors.New("商户列表数据格式错误")
-			}
-			if seenMerchants[merchantID] {
-				continue
-			}
-			seenMerchants[merchantID] = true
-			result, err := client.MerchantDetail(ctx, token, merchantID)
-			if err != nil {
-				return nil, fmt.Errorf("商户 %s 详情获取失败: %w", merchantID, err)
-			}
-			var detail struct {
-				Data *json.RawMessage `json:"data"`
-			}
-			if err := json.Unmarshal(result, &detail); err != nil || detail.Data == nil {
-				return nil, errors.New("商户详情数据格式错误")
-			}
-			merchant["auto_detail"] = *detail.Data
-			merchants = append(merchants, merchant)
-		}
+		merchants = append(merchants, response.Data.List...)
 		if pageNum >= response.Data.Pages {
 			break
 		}
