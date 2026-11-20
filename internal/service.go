@@ -112,7 +112,7 @@ func queryAgentHierarchy(ctx context.Context, client *Client, token, recommendCo
 	agents := AgentResult{Total: page.Total, List: make([]AgentWithDescendants, 0, len(page.List))}
 	for _, agent := range page.List {
 		item := AgentWithDescendants{
-			AgentWithData: AgentWithData{Agent: agent, Merchants: []Merchant{}},
+			AgentWithData: AgentWithData{Agent: agent, Terminals: []Terminal{}},
 			Descendants:   []AgentWithData{},
 		}
 		for pageNum := 1; ; pageNum++ {
@@ -127,7 +127,7 @@ func queryAgentHierarchy(ctx context.Context, client *Client, token, recommendCo
 				return AgentResult{}, errors.New("代理下级数据格式错误")
 			}
 			for _, descendant := range response.Data.List {
-				item.Descendants = append(item.Descendants, AgentWithData{Agent: descendant, Merchants: []Merchant{}})
+				item.Descendants = append(item.Descendants, AgentWithData{Agent: descendant, Terminals: []Terminal{}})
 			}
 			if pageNum >= response.Data.Pages {
 				break
@@ -149,11 +149,34 @@ func QueryAgents(ctx context.Context, date string, config Config) (AgentResult, 
 	}
 	for i := range agents.List {
 		agent := &agents.List[i]
-		merchants, err := queryMerchants(ctx, client, token, agent.RecommendCode, date)
+		terminals, err := queryTerminals(ctx, client, token, agent.RecommendCode, date)
 		if err != nil {
 			return AgentResult{}, err
 		}
-		agent.Merchants = merchants
+		agent.Terminals = terminals
+		for j := range agent.Descendants {
+			descendant := &agent.Descendants[j]
+			terminals, err := queryTerminals(ctx, client, token, descendant.RecommendCode, date)
+			if err != nil {
+				return AgentResult{}, err
+			}
+			descendant.Terminals = terminals
+		}
+	}
+	for i := range agents.List {
+		agent := &agents.List[i]
+		if err := populateTerminalMerchants(ctx, client, token, agent.Terminals); err != nil {
+			return AgentResult{}, err
+		}
+		for j := range agent.Descendants {
+			descendant := &agent.Descendants[j]
+			if err := populateTerminalMerchants(ctx, client, token, descendant.Terminals); err != nil {
+				return AgentResult{}, err
+			}
+		}
+	}
+	for i := range agents.List {
+		agent := &agents.List[i]
 		trades, err := queryTrades(ctx, client, token, agent.RecommendCode, date)
 		if err != nil {
 			return AgentResult{}, err
@@ -161,11 +184,6 @@ func QueryAgents(ctx context.Context, date string, config Config) (AgentResult, 
 		agent.Trades = trades
 		for j := range agent.Descendants {
 			descendant := &agent.Descendants[j]
-			merchants, err := queryMerchants(ctx, client, token, descendant.RecommendCode, date)
-			if err != nil {
-				return AgentResult{}, err
-			}
-			descendant.Merchants = merchants
 			trades, err := queryTrades(ctx, client, token, descendant.RecommendCode, date)
 			if err != nil {
 				return AgentResult{}, err
@@ -177,7 +195,7 @@ func QueryAgents(ctx context.Context, date string, config Config) (AgentResult, 
 }
 
 type MergedAgentResult struct {
-	Merchants []Merchant        `json:"auto_merchants"`
+	Terminals []Terminal        `json:"auto_terminals"`
 	Trades    []json.RawMessage `json:"auto_trades"`
 }
 
@@ -186,143 +204,70 @@ func QueryMergedAgents(ctx context.Context, date string, config Config) (MergedA
 	if err != nil {
 		return MergedAgentResult{}, err
 	}
-	result := MergedAgentResult{Merchants: []Merchant{}, Trades: []json.RawMessage{}}
+	result := MergedAgentResult{Terminals: []Terminal{}, Trades: []json.RawMessage{}}
 	for _, agent := range agents.List {
-		result.Merchants = append(result.Merchants, agent.Merchants...)
+		result.Terminals = append(result.Terminals, agent.Terminals...)
 		result.Trades = append(result.Trades, agent.Trades...)
 		for _, descendant := range agent.Descendants {
-			result.Merchants = append(result.Merchants, descendant.Merchants...)
+			result.Terminals = append(result.Terminals, descendant.Terminals...)
 			result.Trades = append(result.Trades, descendant.Trades...)
 		}
 	}
 	return result, nil
 }
 
-type DescendantCount struct {
-	ID            string `json:"id"`
-	MerchantCount int    `json:"auto_merchant_count"`
-}
-
-type AgentCount struct {
-	ID              string            `json:"id"`
-	DescendantCount int               `json:"auto_descendant_count"`
-	MerchantCount   int               `json:"auto_merchant_count"`
-	Descendants     []DescendantCount `json:"auto_descendants"`
-}
-
-type AgentCountResult struct {
-	AgentCount      int          `json:"auto_agent_count"`
-	DescendantCount int          `json:"auto_descendant_count"`
-	MerchantCount   int          `json:"auto_merchant_count"`
-	Agents          []AgentCount `json:"auto_agents"`
-}
-
-func QueryAgentCounts(ctx context.Context, date string, config Config) (AgentCountResult, error) {
-	client, token, err := Login(ctx, config.Account)
-	if err != nil {
-		return AgentCountResult{}, err
-	}
-	agents, err := queryAgentHierarchy(ctx, client, token, config.Account.RecommendCode)
-	if err != nil {
-		return AgentCountResult{}, err
-	}
-	counts := AgentCountResult{AgentCount: len(agents.List), Agents: make([]AgentCount, 0, len(agents.List))}
-	for _, agent := range agents.List {
-		merchantCount, err := queryMerchantCount(ctx, client, token, agent.RecommendCode, date)
+func populateTerminalMerchants(ctx context.Context, client *Client, token string, terminals []Terminal) error {
+	for _, terminal := range terminals {
+		var sn string
+		if err := json.Unmarshal(terminal["sn"], &sn); err != nil || sn == "" {
+			return errors.New("终端 SN 数据格式错误")
+		}
+		merchants, err := queryMerchantsBySN(ctx, client, token, sn)
 		if err != nil {
-			return AgentCountResult{}, err
+			return err
 		}
-		item := AgentCount{
-			ID:              agent.ID,
-			DescendantCount: len(agent.Descendants),
-			MerchantCount:   merchantCount,
-			Descendants:     make([]DescendantCount, 0, len(agent.Descendants)),
+		terminal["auto_merchants"], err = json.Marshal(merchants)
+		if err != nil {
+			return err
 		}
-		counts.DescendantCount += item.DescendantCount
-		counts.MerchantCount += merchantCount
-		for _, descendant := range agent.Descendants {
-			merchantCount, err := queryMerchantCount(ctx, client, token, descendant.RecommendCode, date)
-			if err != nil {
-				return AgentCountResult{}, err
-			}
-			item.Descendants = append(item.Descendants, DescendantCount{ID: descendant.ID, MerchantCount: merchantCount})
-			counts.MerchantCount += merchantCount
-		}
-		counts.Agents = append(counts.Agents, item)
 	}
-	return counts, nil
+	return nil
 }
 
-func queryMerchantCount(ctx context.Context, client *Client, token, recommendCode, date string) (int, error) {
-	result, err := client.MerchantList(ctx, token, recommendCode, date+" 00:00:00", date+" 23:59:59", 1)
-	if err != nil {
-		return 0, errors.New("商户数量获取失败")
-	}
-	var response struct {
-		Data *MerchantPage `json:"data"`
-	}
-	if err := json.Unmarshal(result, &response); err != nil || response.Data == nil || response.Data.Total == nil {
-		return 0, errors.New("商户数量数据格式错误")
-	}
-	return *response.Data.Total, nil
-}
-
-func queryMerchants(ctx context.Context, client *Client, token, recommendCode, date string) ([]Merchant, error) {
+func queryMerchantsBySN(ctx context.Context, client *Client, token, sn string) ([]Merchant, error) {
 	merchants := []Merchant{}
-	startTime := date + " 00:00:00"
-	endTime := date + " 23:59:59"
+	seenMerchants := make(map[string]bool)
 	for pageNum := 1; ; pageNum++ {
-		result, err := client.MerchantList(ctx, token, recommendCode, startTime, endTime, pageNum)
+		result, err := client.MerchantListBySN(ctx, token, sn, pageNum)
 		if err != nil {
-			return nil, errors.New("商户列表获取失败")
+			return nil, fmt.Errorf("终端 %s 商户列表获取失败: %w", sn, err)
 		}
 		var response struct {
 			Data *MerchantPage `json:"data"`
 		}
 		if err := json.Unmarshal(result, &response); err != nil || response.Data == nil {
-			return nil, errors.New("商户列表数据格式错误")
+			return nil, fmt.Errorf("终端 %s 商户列表数据格式错误", sn)
 		}
 		for _, merchant := range response.Data.List {
 			var merchantID string
 			if err := json.Unmarshal(merchant["id"], &merchantID); err != nil || merchantID == "" {
 				return nil, errors.New("商户列表数据格式错误")
 			}
+			if seenMerchants[merchantID] {
+				continue
+			}
+			seenMerchants[merchantID] = true
 			result, err := client.MerchantDetail(ctx, token, merchantID)
 			if err != nil {
 				return nil, fmt.Errorf("商户 %s 详情获取失败: %w", merchantID, err)
 			}
 			var detail struct {
-				Data map[string]json.RawMessage `json:"data"`
+				Data *json.RawMessage `json:"data"`
 			}
 			if err := json.Unmarshal(result, &detail); err != nil || detail.Data == nil {
 				return nil, errors.New("商户详情数据格式错误")
 			}
-			var terminalInfo []map[string]json.RawMessage
-			if err := json.Unmarshal(detail.Data["terminalInfo"], &terminalInfo); err != nil {
-				return nil, errors.New("商户终端数据格式错误")
-			}
-			for _, terminal := range terminalInfo {
-				var sn string
-				if err := json.Unmarshal(terminal["sn"], &sn); err != nil || sn == "" {
-					return nil, errors.New("终端 SN 数据格式错误")
-				}
-				terminalList, err := queryTerminals(ctx, client, token, recommendCode, sn)
-				if err != nil {
-					return nil, err
-				}
-				terminal["auto_terminal"], err = json.Marshal(terminalList)
-				if err != nil {
-					return nil, err
-				}
-			}
-			detail.Data["terminalInfo"], err = json.Marshal(terminalInfo)
-			if err != nil {
-				return nil, err
-			}
-			merchant["auto_detail"], err = json.Marshal(detail.Data)
-			if err != nil {
-				return nil, err
-			}
+			merchant["auto_detail"] = *detail.Data
 			merchants = append(merchants, merchant)
 		}
 		if pageNum >= response.Data.Pages {
@@ -332,21 +277,23 @@ func queryMerchants(ctx context.Context, client *Client, token, recommendCode, d
 	return merchants, nil
 }
 
-func queryTerminals(ctx context.Context, client *Client, token, recommendCode, sn string) ([]json.RawMessage, error) {
-	terminals := []json.RawMessage{}
+func queryTerminals(ctx context.Context, client *Client, token, recommendCode, date string) ([]Terminal, error) {
+	terminals := []Terminal{}
+	startTime := date + " 00:00:00"
+	endTime := date + " 23:59:59"
 	for pageNum := 1; ; pageNum++ {
-		result, err := client.TerminalList(ctx, token, recommendCode, sn, pageNum)
+		result, err := client.TerminalList(ctx, token, recommendCode, startTime, endTime, pageNum)
 		if err != nil {
-			return nil, fmt.Errorf("终端 %s 查询失败: %w", sn, err)
+			return nil, fmt.Errorf("代理 %s 终端列表获取失败: %w", recommendCode, err)
 		}
 		var response struct {
 			Data *struct {
-				Pages int               `json:"pages"`
-				List  []json.RawMessage `json:"list"`
+				Pages int        `json:"pages"`
+				List  []Terminal `json:"list"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(result, &response); err != nil || response.Data == nil {
-			return nil, fmt.Errorf("终端 %s 数据格式错误", sn)
+			return nil, fmt.Errorf("代理 %s 终端列表数据格式错误", recommendCode)
 		}
 		terminals = append(terminals, response.Data.List...)
 		if pageNum >= response.Data.Pages {

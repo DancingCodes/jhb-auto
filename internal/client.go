@@ -147,12 +147,13 @@ type AgentPage struct {
 }
 
 type MerchantPage struct {
-	Total *int       `json:"total"`
 	Pages int        `json:"pages"`
 	List  []Merchant `json:"list"`
 }
 
 type Merchant map[string]json.RawMessage
+
+type Terminal map[string]json.RawMessage
 
 type TradePage struct {
 	Pages int               `json:"pages"`
@@ -161,7 +162,7 @@ type TradePage struct {
 
 type AgentWithData struct {
 	Agent
-	Merchants []Merchant        `json:"auto_merchants"`
+	Terminals []Terminal        `json:"auto_terminals"`
 	Trades    []json.RawMessage `json:"auto_trades"`
 }
 
@@ -194,13 +195,11 @@ func (c *Client) AgentDescendants(ctx context.Context, token, agentID string, pa
 	return c.request(ctx, endpoint, http.MethodGet, nil, token)
 }
 
-func (c *Client) MerchantList(ctx context.Context, token, recommendCode, startTime, endTime string, pageNum int) (json.RawMessage, error) {
+func (c *Client) MerchantListBySN(ctx context.Context, token, sn string, pageNum int) (json.RawMessage, error) {
 	query := url.Values{
-		"recommendCode": {recommendCode},
-		"startTime":     {startTime},
-		"endTime":       {endTime},
-		"pageNum":       {strconv.Itoa(pageNum)},
-		"pageSize":      {"100"},
+		"sn":       {sn},
+		"pageNum":  {strconv.Itoa(pageNum)},
+		"pageSize": {"100"},
 	}
 	endpoint := gatewayAPI + "/pagent/agent-portal/query/merchant?" + query.Encode()
 	return c.request(ctx, endpoint, http.MethodGet, nil, token)
@@ -211,10 +210,11 @@ func (c *Client) MerchantDetail(ctx context.Context, token, merchantID string) (
 	return c.request(ctx, endpoint, http.MethodGet, nil, token)
 }
 
-func (c *Client) TerminalList(ctx context.Context, token, recommendCode, sn string, pageNum int) (json.RawMessage, error) {
+func (c *Client) TerminalList(ctx context.Context, token, recommendCode, startTime, endTime string, pageNum int) (json.RawMessage, error) {
 	query := url.Values{
 		"recommendCode": {recommendCode},
-		"sn":            {sn},
+		"startTime":     {startTime},
+		"endTime":       {endTime},
 		"pageNum":       {strconv.Itoa(pageNum)},
 		"pageSize":      {"100"},
 	}

@@ -25,7 +25,7 @@ config/accounts/*.json        各客户账号配置（真实账号不提交）
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/agent/{id}/descendants`
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/merchant`
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/merchant/{id}/detail`
-- `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/terminal`（按终端 SN 和所属代理的 `recommendCode` 查询）
+- `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/terminal`（按所属代理的 `recommendCode` 和起止时间查询）
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/trade`
 
 上游接口只由内部客户端调用，不单独暴露为本项目的 HTTP 路由。
@@ -41,9 +41,7 @@ go test ./...
 服务监听 `9105`。
 
 - `GET /health`：健康检查
-- `GET /api/agents?client=client-yimi&date=YYYY-MM-DD`：仅使用指定客户的账号。先逐页查询全部代理及每条代理的下级，再按各自的推荐码查询商户、商户详情、详情中每台终端的信息和指定日期交易；商户和交易列表都使用指定日期 `00:00:00` 至 `23:59:59`，省略 `date` 时默认昨天。所有上游列表每页请求 100 条。每条代理及下级包含 `auto_merchants`、`auto_trades`，代理还包含 `auto_descendants`；每条商户包含 `auto_detail`，其中 `terminalInfo` 的每项包含 `auto_terminal` 列表
-- `GET /api/agents/merged?client=client-yimi&date=YYYY-MM-DD`：复用代理查询，将全部代理及下级的商户和交易分别合并，只返回 `auto_merchants` 和 `auto_trades`；日期规则与 `/api/agents` 相同
-- `GET /api/agents/counts?client=client-yimi&date=YYYY-MM-DD`：仅使用指定客户的账号，返回总代理数、下级数、商户数，以及每个代理和下级各自的商户数；`date` 省略时默认昨天。仅用 `id` 标识记录，不请求商户详情。总体商户数是各记录商户数之和
+- `GET /api/agents/merged?client=client-yimi&date=YYYY-MM-DD`：仅使用指定客户的账号。先逐页查询全部代理及每条代理的下级，再按各自的推荐码取完指定日期终端；按终端 SN 取完商户及详情，最后取完指定日期交易。返回合并后的 `auto_terminals` 和 `auto_trades`；每条终端包含 `auto_merchants`，每条商户包含 `auto_detail`。终端和交易均使用指定日期 `00:00:00` 至 `23:59:59`，省略 `date` 时默认昨天；商户按 SN 查询，不受 `date` 限制。所有上游列表每页请求 100 条
 
 ## 配置
 
