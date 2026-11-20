@@ -292,12 +292,37 @@ func queryMerchants(ctx context.Context, client *Client, token, recommendCode, d
 				return nil, fmt.Errorf("商户 %s 详情获取失败: %w", merchantID, err)
 			}
 			var detail struct {
-				Data *json.RawMessage `json:"data"`
+				Data map[string]json.RawMessage `json:"data"`
 			}
 			if err := json.Unmarshal(result, &detail); err != nil || detail.Data == nil {
 				return nil, errors.New("商户详情数据格式错误")
 			}
-			merchant["auto_detail"] = *detail.Data
+			var terminalInfo []map[string]json.RawMessage
+			if err := json.Unmarshal(detail.Data["terminalInfo"], &terminalInfo); err != nil {
+				return nil, errors.New("商户终端数据格式错误")
+			}
+			for _, terminal := range terminalInfo {
+				var sn string
+				if err := json.Unmarshal(terminal["sn"], &sn); err != nil || sn == "" {
+					return nil, errors.New("终端 SN 数据格式错误")
+				}
+				terminalList, err := queryTerminals(ctx, client, token, sn)
+				if err != nil {
+					return nil, err
+				}
+				terminal["auto_terminal"], err = json.Marshal(terminalList)
+				if err != nil {
+					return nil, err
+				}
+			}
+			detail.Data["terminalInfo"], err = json.Marshal(terminalInfo)
+			if err != nil {
+				return nil, err
+			}
+			merchant["auto_detail"], err = json.Marshal(detail.Data)
+			if err != nil {
+				return nil, err
+			}
 			merchants = append(merchants, merchant)
 		}
 		if pageNum >= response.Data.Pages {
@@ -305,6 +330,30 @@ func queryMerchants(ctx context.Context, client *Client, token, recommendCode, d
 		}
 	}
 	return merchants, nil
+}
+
+func queryTerminals(ctx context.Context, client *Client, token, sn string) ([]json.RawMessage, error) {
+	terminals := []json.RawMessage{}
+	for pageNum := 1; ; pageNum++ {
+		result, err := client.TerminalList(ctx, token, sn, pageNum)
+		if err != nil {
+			return nil, fmt.Errorf("终端 %s 查询失败: %w", sn, err)
+		}
+		var response struct {
+			Data *struct {
+				Pages int               `json:"pages"`
+				List  []json.RawMessage `json:"list"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(result, &response); err != nil || response.Data == nil {
+			return nil, fmt.Errorf("终端 %s 数据格式错误", sn)
+		}
+		terminals = append(terminals, response.Data.List...)
+		if pageNum >= response.Data.Pages {
+			break
+		}
+	}
+	return terminals, nil
 }
 
 func queryTrades(ctx context.Context, client *Client, token, recommendCode, date string) ([]json.RawMessage, error) {
