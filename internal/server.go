@@ -80,9 +80,21 @@ func writeError(w http.ResponseWriter, message string) {
 
 func beginRequest(r *http.Request) func() {
 	start := time.Now()
-	log.Printf("接口开始: method=%s path=%s start=%s", r.Method, r.URL.Path, start.Format(time.RFC3339))
+	if r.URL.Path == "/health" {
+		log.Printf("接口开始: method=%s path=%s start=%s", r.Method, r.URL.Path, start.Format(time.RFC3339))
+		return func() {
+			end := time.Now()
+			log.Printf("接口结束: method=%s path=%s end=%s 累计用时=%s", r.Method, r.URL.Path, end.Format(time.RFC3339), end.Sub(start))
+		}
+	}
+	client := r.URL.Query().Get("client")
+	date := r.URL.Query().Get("date")
+	if date == "" {
+		date = start.AddDate(0, 0, -1).Format("2006-01-02")
+	}
+	log.Printf("接口开始: method=%s path=%s client=%q date=%q start=%s", r.Method, r.URL.Path, client, date, start.Format(time.RFC3339))
 	return func() {
 		end := time.Now()
-		log.Printf("接口结束: method=%s path=%s end=%s 累计用时=%s", r.Method, r.URL.Path, end.Format(time.RFC3339), end.Sub(start))
+		log.Printf("接口结束: method=%s path=%s client=%q date=%q end=%s 累计用时=%s", r.Method, r.URL.Path, client, date, end.Format(time.RFC3339), end.Sub(start))
 	}
 }
