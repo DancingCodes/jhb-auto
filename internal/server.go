@@ -2,6 +2,7 @@ package internal
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 )
@@ -16,6 +17,8 @@ func Handler() http.Handler {
 }
 
 func health(w http.ResponseWriter, r *http.Request) {
+	finish := beginRequest(r)
+	defer finish()
 	if r.Method != http.MethodGet {
 		writeError(w, "请求方式错误")
 		return
@@ -24,6 +27,8 @@ func health(w http.ResponseWriter, r *http.Request) {
 }
 
 func agents(w http.ResponseWriter, r *http.Request) {
+	finish := beginRequest(r)
+	defer finish()
 	if r.Method != http.MethodGet {
 		writeError(w, "请求方式错误")
 		return
@@ -47,6 +52,8 @@ func agents(w http.ResponseWriter, r *http.Request) {
 }
 
 func mergedAgents(w http.ResponseWriter, r *http.Request) {
+	finish := beginRequest(r)
+	defer finish()
 	if r.Method != http.MethodGet {
 		writeError(w, "请求方式错误")
 		return
@@ -70,6 +77,8 @@ func mergedAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func agentCounts(w http.ResponseWriter, r *http.Request) {
+	finish := beginRequest(r)
+	defer finish()
 	if r.Method != http.MethodGet {
 		writeError(w, "请求方式错误")
 		return
@@ -119,4 +128,13 @@ func writeError(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusInternalServerError)
 	_, _ = w.Write([]byte(message))
+}
+
+func beginRequest(r *http.Request) func() {
+	start := time.Now()
+	log.Printf("接口开始: method=%s path=%s start=%s", r.Method, r.URL.Path, start.Format(time.RFC3339))
+	return func() {
+		end := time.Now()
+		log.Printf("接口结束: method=%s path=%s end=%s 累计用时=%s", r.Method, r.URL.Path, end.Format(time.RFC3339), end.Sub(start))
+	}
 }
