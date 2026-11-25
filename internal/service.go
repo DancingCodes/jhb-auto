@@ -206,14 +206,25 @@ func QueryMergedAgents(ctx context.Context, date string, config Config) (MergedA
 	}
 	result := MergedAgentResult{Terminals: []Terminal{}, Trades: []json.RawMessage{}}
 	for _, agent := range agents.List {
-		result.Terminals = append(result.Terminals, agent.Terminals...)
+		result.Terminals = appendTerminalsWithMerchants(result.Terminals, agent.Terminals)
 		result.Trades = append(result.Trades, agent.Trades...)
 		for _, descendant := range agent.Descendants {
-			result.Terminals = append(result.Terminals, descendant.Terminals...)
+			result.Terminals = appendTerminalsWithMerchants(result.Terminals, descendant.Terminals)
 			result.Trades = append(result.Trades, descendant.Trades...)
 		}
 	}
 	return result, nil
+}
+
+func appendTerminalsWithMerchants(target, terminals []Terminal) []Terminal {
+	for _, terminal := range terminals {
+		var merchants []Merchant
+		if err := json.Unmarshal(terminal["auto_merchants"], &merchants); err == nil && len(merchants) == 0 {
+			continue
+		}
+		target = append(target, terminal)
+	}
+	return target
 }
 
 func populateTerminalMerchants(ctx context.Context, client *Client, token string, terminals []Terminal) error {
