@@ -191,12 +191,40 @@ func QueryAgents(ctx context.Context, date string, config Config) (AgentResult, 
 			descendant.Trades = trades
 		}
 	}
+	for i := range agents.List {
+		agent := &agents.List[i]
+		deposits, err := queryDeposits(ctx, client, token, agent.RecommendCode, date)
+		if err != nil {
+			return AgentResult{}, err
+		}
+		agent.Deposits = deposits
+		flows, err := queryFlows(ctx, client, token, agent.RecommendCode, date)
+		if err != nil {
+			return AgentResult{}, err
+		}
+		agent.Flows = flows
+		for j := range agent.Descendants {
+			descendant := &agent.Descendants[j]
+			deposits, err := queryDeposits(ctx, client, token, descendant.RecommendCode, date)
+			if err != nil {
+				return AgentResult{}, err
+			}
+			descendant.Deposits = deposits
+			flows, err := queryFlows(ctx, client, token, descendant.RecommendCode, date)
+			if err != nil {
+				return AgentResult{}, err
+			}
+			descendant.Flows = flows
+		}
+	}
 	return agents, nil
 }
 
 type MergedAgentResult struct {
 	Terminals []Terminal        `json:"auto_terminals"`
 	Trades    []json.RawMessage `json:"auto_trades"`
+	Deposits  []json.RawMessage `json:"auto_deposits"`
+	Flows     []json.RawMessage `json:"auto_flows"`
 }
 
 func QueryMergedAgents(ctx context.Context, date string, config Config) (MergedAgentResult, error) {
@@ -204,13 +232,22 @@ func QueryMergedAgents(ctx context.Context, date string, config Config) (MergedA
 	if err != nil {
 		return MergedAgentResult{}, err
 	}
-	result := MergedAgentResult{Terminals: []Terminal{}, Trades: []json.RawMessage{}}
+	result := MergedAgentResult{
+		Terminals: []Terminal{},
+		Trades:    []json.RawMessage{},
+		Deposits:  []json.RawMessage{},
+		Flows:     []json.RawMessage{},
+	}
 	for _, agent := range agents.List {
 		result.Terminals = appendTerminalsWithMerchants(result.Terminals, agent.Terminals)
 		result.Trades = append(result.Trades, agent.Trades...)
+		result.Deposits = append(result.Deposits, agent.Deposits...)
+		result.Flows = append(result.Flows, agent.Flows...)
 		for _, descendant := range agent.Descendants {
 			result.Terminals = appendTerminalsWithMerchants(result.Terminals, descendant.Terminals)
 			result.Trades = append(result.Trades, descendant.Trades...)
+			result.Deposits = append(result.Deposits, descendant.Deposits...)
+			result.Flows = append(result.Flows, descendant.Flows...)
 		}
 	}
 	return result, nil
@@ -313,4 +350,37 @@ func queryTrades(ctx context.Context, client *Client, token, recommendCode, date
 		}
 	}
 	return trades, nil
+}
+
+func queryDeposits(ctx context.Context, client *Client, token, recommendCode, date string) ([]json.RawMessage, error) {
+	return queryPagedRecords(ctx, "押金", recommendCode, func(ctx context.Context, pageNum int) (json.RawMessage, error) {
+		return client.DepositList(ctx, token, recommendCode, date+" 00:00:00", date+" 23:59:59", pageNum)
+	})
+}
+
+func queryFlows(ctx context.Context, client *Client, token, recommendCode, date string) ([]json.RawMessage, error) {
+	return queryPagedRecords(ctx, "流水", recommendCode, func(ctx context.Context, pageNum int) (json.RawMessage, error) {
+		return client.FlowList(ctx, token, recommendCode, date+" 00:00:00", date+" 23:59:59", pageNum)
+	})
+}
+
+func queryPagedRecords(ctx context.Context, label, recommendCode string, fetch func(context.Context, int) (json.RawMessage, error)) ([]json.RawMessage, error) {
+	records := []json.RawMessage{}
+	for pageNum := 1; ; pageNum++ {
+		result, err := fetch(ctx, pageNum)
+		if err != nil {
+			return nil, fmt.Errorf("代理 %s %s列表获取失败: %w", recommendCode, label, err)
+		}
+		var response struct {
+			Data *RawListPage `json:"data"`
+		}
+		if err := json.Unmarshal(result, &response); err != nil || response.Data == nil {
+			return nil, fmt.Errorf("代理 %s %s列表数据格式错误", recommendCode, label)
+		}
+		records = append(records, response.Data.List...)
+		if pageNum >= response.Data.Pages {
+			break
+		}
+	}
+	return records, nil
 }

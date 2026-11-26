@@ -26,6 +26,8 @@ config/accounts/*.json        各客户账号配置（真实账号不提交）
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/merchant`
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/terminal`（按所属代理的 `recommendCode` 和起止时间查询）
 - `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/trade`
+- `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/deposit`
+- `GET https://jhb-gateway.haiyuebiz.com/pagent/agent-portal/query/flow`
 
 上游接口只由内部客户端调用，不单独暴露为本项目的 HTTP 路由。
 GET 请求遇到上游 HTTP 429 时会按 `Retry-After` 等待并重试；未提供该响应头时使用递增等待，最多重试 5 次。
@@ -40,7 +42,7 @@ go test ./...
 服务监听 `9105`。
 
 - `GET /health`：健康检查
-- `GET /api/agents/merged?client=client-yimi&date=YYYY-MM-DD`：仅使用指定客户的账号。先逐页查询全部代理及每条代理的下级，再按各自的推荐码取完指定日期终端；按终端 SN 取完商户列表，最后取完指定日期交易。返回合并后的 `auto_terminals` 和 `auto_trades`；每条终端包含 `auto_merchants`。终端和交易均使用指定日期 `00:00:00` 至 `23:59:59`，省略 `date` 时默认昨天；商户按 SN 查询，不受 `date` 限制。所有上游列表每页请求 100 条
+- `GET /api/agents/merged?client=client-yimi&date=YYYY-MM-DD`：仅使用指定客户的账号。先逐页查询全部代理及每条代理的下级，再按各自的推荐码取完指定日期终端；按终端 SN 取完商户列表，再取完指定日期交易、押金和流水。返回合并后的 `auto_terminals`、`auto_trades`、`auto_deposits` 和 `auto_flows`；每条终端包含 `auto_merchants`。终端、交易、押金和流水均使用指定日期 `00:00:00` 至 `23:59:59`，省略 `date` 时默认昨天；商户按 SN 查询，不受 `date` 限制。所有上游列表每页请求 100 条
 
 ## 配置
 

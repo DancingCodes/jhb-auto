@@ -160,10 +160,17 @@ type TradePage struct {
 	List  []json.RawMessage `json:"list"`
 }
 
+type RawListPage struct {
+	Pages int               `json:"pages"`
+	List  []json.RawMessage `json:"list"`
+}
+
 type AgentWithData struct {
 	Agent
 	Terminals []Terminal        `json:"auto_terminals"`
 	Trades    []json.RawMessage `json:"auto_trades"`
+	Deposits  []json.RawMessage `json:"auto_deposits"`
+	Flows     []json.RawMessage `json:"auto_flows"`
 }
 
 type AgentWithDescendants struct {
@@ -226,5 +233,29 @@ func (c *Client) TradeList(ctx context.Context, token, recommendCode, startTime,
 		"pageSize":      {"100"},
 	}
 	endpoint := gatewayAPI + "/pagent/agent-portal/query/trade?" + query.Encode()
+	return c.request(ctx, endpoint, http.MethodGet, nil, token)
+}
+
+func (c *Client) DepositList(ctx context.Context, token, recommendCode, startTime, endTime string, pageNum int) (json.RawMessage, error) {
+	query := url.Values{
+		"recommendCode": {recommendCode},
+		"startTime":     {startTime},
+		"endTime":       {endTime},
+		"pageNum":       {strconv.Itoa(pageNum)},
+		"pageSize":      {"100"},
+	}
+	endpoint := gatewayAPI + "/pagent/agent-portal/query/deposit?" + query.Encode()
+	return c.request(ctx, endpoint, http.MethodGet, nil, token)
+}
+
+func (c *Client) FlowList(ctx context.Context, token, recommendCode, startTime, endTime string, pageNum int) (json.RawMessage, error) {
+	query := url.Values{
+		"recommendCode": {recommendCode},
+		"startTime":     {startTime},
+		"endTime":       {endTime},
+		"pageNum":       {strconv.Itoa(pageNum)},
+		"pageSize":      {"100"},
+	}
+	endpoint := gatewayAPI + "/pagent/agent-portal/query/flow?" + query.Encode()
 	return c.request(ctx, endpoint, http.MethodGet, nil, token)
 }
